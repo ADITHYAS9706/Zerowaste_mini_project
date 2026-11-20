@@ -1,9 +1,14 @@
 from fastapi import FastAPI
 
-
-app = FastAPI(title="ZeroWasteNet")
-
+app = FastAPI(
+    title="ZeroWasteNet API",
+    description="Smart Grocery Inventory Redistribution System",
+    version="1.0"
+)
 
 @app.get("/")
-def read_root() -> dict[str, str]:
-    return {"message": "ZeroWasteNet API"}
+def home():
+    return {
+        "message": "Welcome to ZeroWasteNet",
+        "status": "Backend running successfully"
+    }
