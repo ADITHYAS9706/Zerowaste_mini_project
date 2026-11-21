@@ -1,0 +1,21 @@
+product_id,product_name,category,unit,base_daily_demand,unit_price
+P001,Milk,Dairy,litre,30,45.0
+P002,Curd,Dairy,cup,25,35.0
+P003,Butter,Dairy,pack,12,55.0
+P004,Paneer,Dairy,pack,8,90.0
+P005,Bread,Bakery,pack,18,35.0
+P006,Eggs,Dairy,piece,40,7.0
+P007,Tomato,Vegetables,kg,20,30.0
+P008,Potato,Vegetables,kg,15,28.0
+P009,Onion,Vegetables,kg,16,32.0
+P010,Carrot,Vegetables,kg,10,40.0
+P011,Apple,Fruits,kg,9,140.0
+P012,Banana,Fruits,dozen,14,50.0
+P013,Orange,Fruits,kg,11,80.0
+P014,Rice,Staples,kg,7,65.0
+P015,Wheat Flour,Staples,kg,8,48.0
+P016,Sugar,Staples,kg,6,44.0
+P017,Cooking Oil,Staples,litre,5,145.0
+P018,Biscuits,Snacks,pack,22,20.0
+P019,Juice,Beverages,bottle,13,35.0
+P020,Cheese,Dairy,pack,6,110.0
