@@ -1,0 +1,18 @@
+category,metric,value
+Dataset,Cleaned records,30400.0
+Dataset,Feature records,29840.0
+Dataset,Stores,5.0
+Dataset,Products,18.0
+Dataset,Store-product combinations,40.0
+Validation,Passed checks,8.0
+Validation,Failed checks,0.0
+Fixed Backtest,V3 MAE,38.40574659863945
+Fixed Backtest,V3 RMSE,49.82402723125477
+Fixed Backtest,Naive MAE,46.07568027210884
+Fixed Backtest,Naive RMSE,59.28556368311336
+V3 Rolling-Origin,MAE,38.34316006129676
+V3 Rolling-Origin,RMSE,49.79423709474926
+V3 Rolling-Origin,R2,-0.3261163169249106
+Seasonal Naive,MAE,46.07568027210884
+Seasonal Naive,RMSE,59.28556368311336
+Seasonal Naive,R2,-0.8798420496238388

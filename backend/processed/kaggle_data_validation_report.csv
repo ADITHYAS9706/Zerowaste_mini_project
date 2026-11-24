@@ -1,0 +1,9 @@
+validation_check,status,details
+Total records,PASS,30400 records found
+Missing values,PASS,0 missing values
+Date validity,PASS,0 invalid dates
+Duplicate store-product-date records,PASS,0 duplicate records
+Store-product combinations,PASS,40 unique combinations
+Date continuity,PASS,0 missing store-product dates
+Negative sales quantities,PASS,0 negative values
+Negative inventory values,PASS,0 negative values
