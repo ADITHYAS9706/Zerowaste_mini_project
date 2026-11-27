@@ -3,7 +3,7 @@ from pathlib import Path
 
 # Project paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-INPUT_FILE = BASE_DIR / "data" / "kaggle" / "sales_data.csv"
+INPUT_FILE = "data/kaggle/sales_data.csv"
 OUTPUT_DIR = BASE_DIR / "processed"
 OUTPUT_FILE = OUTPUT_DIR / "kaggle_grocery_cleaned.csv"
 
