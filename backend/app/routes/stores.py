@@ -1,21 +1,57 @@
 
 import math
+import os
 
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
+from supabase import create_client
 
 from app.database import engine
-from app.schemas.store import StoreCreate
+
+
+# Load backend environment variables
+BASE_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(BASE_DIR / ".env")
 
 
 router = APIRouter(prefix="/stores", tags=["Stores"])
 
 
 # -----------------------------------------
+# Registration request schema
+# -----------------------------------------
+
+class StoreRegistration(BaseModel):
+    store_name: str = Field(min_length=2, max_length=150)
+    full_name: str = Field(min_length=2, max_length=150)
+    email: str = Field(min_length=5, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    address: str = Field(min_length=3, max_length=500)
+    phone: str = Field(min_length=7, max_length=20)
+
+    @field_validator("store_name", "full_name", "email", "address", "phone")
+    @classmethod
+    def strip_values(cls, value):
+        return value.strip()
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value):
+        if "@" not in value or "." not in value.split("@")[-1]:
+            raise ValueError("Enter a valid email address")
+        return value.lower()
+
+
+# -----------------------------------------
 # Calculate distance using Haversine formula
 # -----------------------------------------
+
 def calculate_distance(lat1, lon1, lat2, lon2):
-    earth_radius = 6371  # Kilometres
+    earth_radius = 6371
 
     lat1 = math.radians(lat1)
     lon1 = math.radians(lon1)
@@ -38,11 +74,42 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 
 # -----------------------------------------
-# Add a new store
+# Free store and manager registration
 # -----------------------------------------
-@router.post("/")
-def create_store(store: StoreCreate):
+
+@router.post("/register", status_code=201)
+def register_store(registration: StoreRegistration):
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_secret = os.getenv("SUPABASE_SECRET_KEY")
+
+    if not supabase_url or not supabase_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="Supabase backend configuration is missing"
+        )
+
+    supabase = create_client(supabase_url, supabase_secret)
+
+    auth_user_id = None
+
     try:
+        # 1. Create manager authentication account
+        auth_response = supabase.auth.admin.create_user({
+            "email": registration.email,
+            "password": registration.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "full_name": registration.full_name
+            }
+        })
+
+        if not auth_response.user:
+            raise Exception("Supabase did not return a user")
+
+        auth_user_id = str(auth_response.user.id)
+
+        # 2. Create store and manager profile
         with engine.begin() as connection:
 
             next_id = connection.execute(
@@ -51,42 +118,103 @@ def create_store(store: StoreCreate):
 
             store_id = f"S{next_id:03d}"
 
+            # Create store
             connection.execute(
                 text("""
-                    INSERT INTO public.stores
-                    (store_id, store_name, address, latitude, longitude, phone)
-                    VALUES
-                    (:store_id, :store_name, :address, :latitude, :longitude, :phone)
+                    INSERT INTO public.stores (
+                        store_id,
+                        store_name,
+                        address,
+                        phone,
+                        latitude,
+                        longitude,
+                        registration_status,
+                        registration_source,
+                        rejection_reason,
+                        registration_submitted_at
+                    )
+                    VALUES (
+                        :store_id,
+                        :store_name,
+                        :address,
+                        :phone,
+                        NULL,
+                        NULL,
+                        'approved',
+                        'website',
+                        NULL,
+                        NOW()
+                    )
                 """),
                 {
                     "store_id": store_id,
-                    "store_name": store.store_name,
-                    "address": store.address,
-                    "latitude": store.latitude,
-                    "longitude": store.longitude,
-                    "phone": store.phone
+                    "store_name": registration.store_name,
+                    "address": registration.address,
+                    "phone": registration.phone
+                }
+            )
+
+            # Create manager profile
+            connection.execute(
+                text("""
+                    INSERT INTO public.profiles (
+                        user_id,
+                        full_name,
+                        role,
+                        store_id,
+                        is_active
+                    )
+                    VALUES (
+                        :user_id,
+                        :full_name,
+                        'manager',
+                        :store_id,
+                        TRUE
+                    )
+                """),
+                {
+                    "user_id": auth_user_id,
+                    "full_name": registration.full_name,
+                    "store_id": store_id
                 }
             )
 
         return {
             "message": "Store registered successfully",
             "store_id": store_id,
-            "store_name": store.store_name
+            "store_name": registration.store_name,
+            "manager_name": registration.full_name,
+            "role": "manager"
         }
 
+    except HTTPException:
+        raise
+
     except Exception as error:
+
         print("Store registration error:", repr(error))
+
+        # If database creation fails, remove the Auth account
+        # so an unlinked account is not left behind.
+        if auth_user_id:
+            try:
+                supabase.auth.admin.delete_user(auth_user_id)
+            except Exception as cleanup_error:
+                print("Auth cleanup error:", repr(cleanup_error))
+
         raise HTTPException(
-            status_code=500,
-            detail="Unable to register store"
+            status_code=400,
+            detail="Registration failed. Check your details or try another email."
         )
 
 
 # -----------------------------------------
 # Get all registered stores
 # -----------------------------------------
+
 @router.get("/")
 def get_stores():
+
     try:
         with engine.connect() as connection:
             result = connection.execute(
@@ -112,6 +240,7 @@ def get_stores():
 
     except Exception as error:
         print("Get stores error:", repr(error))
+
         raise HTTPException(
             status_code=500,
             detail="Unable to retrieve stores"
@@ -119,14 +248,16 @@ def get_stores():
 
 
 # -----------------------------------------
-# Find nearby stores using user location
+# Find nearby stores
 # -----------------------------------------
+
 @router.get("/nearby")
 def get_nearby_stores(
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
     radius_km: float = Query(10, gt=0)
 ):
+
     try:
         query = text("""
             SELECT
@@ -178,6 +309,7 @@ def get_nearby_stores(
 
     except Exception as error:
         print("Nearby stores error:", repr(error))
+
         raise HTTPException(
             status_code=500,
             detail="Unable to find nearby stores"

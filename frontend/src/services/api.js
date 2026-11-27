@@ -26,3 +26,7 @@ export const createBatch = (data) => api.post("/batches/", data);
 export const createStore = (data) => api.post("/stores/", data);
 
 export default api;
+
+export const registerStore = (storeData) =>
+  api.post("/stores/register", storeData);
+
