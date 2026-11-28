@@ -342,3 +342,39 @@ def get_nearby_stores(
             status_code=500,
             detail="Unable to find nearby stores"
         )
+
+
+class StoreUpdate(BaseModel):
+    store_name: str | None = Field(default=None, min_length=2, max_length=150)
+    address: str | None = Field(default=None, min_length=3, max_length=500)
+    phone: str | None = Field(default=None, max_length=20)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+@router.put("/{store_id}")
+def update_store(store_id: str, update: StoreUpdate):
+    values = update.model_dump(exclude_unset=True)
+    allowed = {"store_name", "address", "phone", "latitude", "longitude"}
+    values = {key: value for key, value in values.items() if key in allowed}
+    if not values:
+        raise HTTPException(status_code=400, detail="Provide at least one field to update")
+
+    assignments = ", ".join(f"{key} = :{key}" for key in values)
+    query = text(f"""
+        UPDATE public.stores
+        SET {assignments}
+        WHERE store_id = :store_id
+        RETURNING store_id, store_name, address, phone, latitude, longitude
+    """)
+    try:
+        with engine.begin() as connection:
+            row = connection.execute(query, {**values, "store_id": store_id}).mappings().first()
+            if not row:
+                raise HTTPException(status_code=404, detail="Store was not found")
+        return {"message": "Store details updated", "store": dict(row)}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("Store update error:", repr(error))
+        raise HTTPException(status_code=500, detail="Unable to update store details")

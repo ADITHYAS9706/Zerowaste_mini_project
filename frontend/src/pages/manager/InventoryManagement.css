@@ -356,3 +356,6 @@
   .inv-stat-card > small { font-size: 9px; }
   .inv-table-footer { align-items: flex-start; flex-direction: column; }
 }
+
+.inv-loading-state > span { display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #dce9df; border-top-color: #31875c; border-radius: 50%; animation: inv-spin .8s linear infinite; }
+@keyframes inv-spin { to { transform: rotate(360deg); } }

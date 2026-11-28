@@ -108,7 +108,7 @@ function StatusPill({ status }) {
   return <span className={`bm-status ${status.id}`}>{status.label}</span>;
 }
 
-export default function BatchManagement({ batches = [], products = [], stores = [], onAddBatch }) {
+export default function BatchManagement({ batches = [], products = [], stores = [], dataLoading = false, onAddBatch }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
 
@@ -158,7 +158,7 @@ export default function BatchManagement({ batches = [], products = [], stores = 
         </button>
       </section>
 
-      {asArray(products).length === 0 && (
+      {!dataLoading && asArray(products).length === 0 && (
         <div className="bm-inline-alert" role="status">
           <AlertTriangle size={17} />
           <span>Register at least one product before adding a batch. Open the Products section first.</span>
@@ -168,19 +168,19 @@ export default function BatchManagement({ batches = [], products = [], stores = 
       <section className="bm-stats-grid" aria-label="Batch summary">
         <article className="bm-stat-card">
           <span className="bm-stat-icon green"><Boxes size={19} /></span>
-          <div><small>Total batches</small><strong>{formatQuantity(rows.length)}</strong><span>Recorded stock lots</span></div>
+          <div><small>Total batches</small><strong>{dataLoading ? "—" : formatQuantity(rows.length)}</strong><span>Recorded stock lots</span></div>
         </article>
         <article className="bm-stat-card">
           <span className="bm-stat-icon blue"><Package size={19} /></span>
-          <div><small>Batches with stock</small><strong>{formatQuantity(batchesWithStock)}</strong><span>Records with remaining quantity</span></div>
+          <div><small>Batches with stock</small><strong>{dataLoading ? "—" : formatQuantity(batchesWithStock)}</strong><span>Records with remaining quantity</span></div>
         </article>
         <article className="bm-stat-card">
           <span className="bm-stat-icon orange"><CalendarClock size={19} /></span>
-          <div><small>Expiry attention</small><strong>{formatQuantity(attentionBatches)}</strong><span>{counts.near} near expiry · {counts.expired} expired</span></div>
+          <div><small>Expiry attention</small><strong>{dataLoading ? "—" : formatQuantity(attentionBatches)}</strong><span>{dataLoading ? "Checking expiry status" : `${counts.near} near expiry · ${counts.expired} expired`}</span></div>
         </article>
         <article className="bm-stat-card">
           <span className="bm-stat-icon purple"><CheckCircle2 size={19} /></span>
-          <div><small>Active batches</small><strong>{formatQuantity(counts.active)}</strong><span>More than 7 days to expiry</span></div>
+          <div><small>Active batches</small><strong>{dataLoading ? "—" : formatQuantity(counts.active)}</strong><span>More than 7 days to expiry</span></div>
         </article>
       </section>
 
@@ -264,6 +264,8 @@ export default function BatchManagement({ batches = [], products = [], stores = 
               ))}
             </div>
           </>
+        ) : dataLoading ? (
+          <div className="bm-empty-state bm-loading-state"><span className="bm-loading-spinner" /><strong>Loading batch register</strong><p>Batch and expiry records are being retrieved.</p></div>
         ) : (
           <div className="bm-empty-state">
             <span><Clock3 size={25} /></span>
@@ -282,7 +284,7 @@ export default function BatchManagement({ batches = [], products = [], stores = 
 
       <div className="bm-info-note">
         <AlertTriangle size={17} />
-        <p><strong>Expiry handling:</strong> Batches with a remaining quantity of zero are marked Depleted. Other batches are flagged as Expired after their expiry date or Near expiry within 7 days. Sales deduction and batch editing need additional backend endpoints.</p>
+        <p><strong>Expiry handling:</strong> Batches with a remaining quantity of zero are marked Depleted. Other batches are flagged as Expired after their expiry date or Near expiry within 7 days. Sales transactions deduct eligible stock using FEFO. Batch editing and deletion are not available in the current backend workflow.</p>
       </div>
     </div>
   );

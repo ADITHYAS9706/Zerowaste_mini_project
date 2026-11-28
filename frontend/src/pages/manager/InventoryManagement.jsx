@@ -104,19 +104,21 @@ function buildInventoryRows(data) {
 }
 
 function Status({ row, threshold }) {
-  if (row._quantity <= threshold) {
-    return <span className="inv-status low">Low stock</span>;
-  }
+  // Expiry risk takes precedence over low quantity because expired stock
+  // must be reviewed before ordinary replenishment decisions.
   if (row._expiredBatches.length > 0) {
     return <span className="inv-status expired">Expired stock</span>;
   }
   if (row._nearBatches.length > 0) {
     return <span className="inv-status near">Near expiry</span>;
   }
+  if (row._quantity <= threshold) {
+    return <span className="inv-status low">Low stock</span>;
+  }
   return <span className="inv-status healthy">In stock</span>;
 }
 
-export default function InventoryManagement({ data, onRegisterBatch, onViewBatches }) {
+export default function InventoryManagement({ data, dataLoading = false, onRegisterBatch, onViewBatches }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
@@ -172,26 +174,26 @@ export default function InventoryManagement({ data, onRegisterBatch, onViewBatch
         <article className="inv-stat-card">
           <span className="inv-stat-icon green"><Package size={19} /></span>
           <span className="inv-stat-label">Inventory records</span>
-          <strong>{quantity(rows.length)}</strong>
+          <strong>{dataLoading ? "—" : quantity(rows.length)}</strong>
           <small>Product and store entries</small>
         </article>
         <article className="inv-stat-card">
           <span className="inv-stat-icon blue"><Warehouse size={19} /></span>
           <span className="inv-stat-label">Available units</span>
-          <strong>{quantity(totalUnits)}</strong>
+          <strong>{dataLoading ? "—" : quantity(totalUnits)}</strong>
           <small>Sum of available quantities</small>
         </article>
         <article className="inv-stat-card">
           <span className="inv-stat-icon orange"><AlertTriangle size={19} /></span>
           <span className="inv-stat-label">Low-stock records</span>
-          <strong>{quantity(lowRows.length)}</strong>
+          <strong>{dataLoading ? "—" : quantity(lowRows.length)}</strong>
           <small>At or below {lowStockThreshold} units</small>
         </article>
         <article className="inv-stat-card">
           <span className="inv-stat-icon purple"><CalendarClock size={19} /></span>
           <span className="inv-stat-label">Expiry attention</span>
-          <strong>{quantity(nearRows.length + expiredRows.length)}</strong>
-          <small>{nearRows.length} near expiry · {expiredRows.length} expired</small>
+          <strong>{dataLoading ? "—" : quantity(nearRows.length + expiredRows.length)}</strong>
+          <small>{dataLoading ? "Checking batch expiry" : `${nearRows.length} near expiry · ${expiredRows.length} expired`}</small>
         </article>
       </section>
 
@@ -298,6 +300,8 @@ export default function InventoryManagement({ data, onRegisterBatch, onViewBatch
               ))}
             </div>
           </>
+        ) : dataLoading ? (
+          <div className="inv-empty-state inv-loading-state"><span className="inv-loading-spinner" /><strong>Loading inventory</strong><p>Stock records are being retrieved. You can continue using the Manager menu.</p></div>
         ) : (
           <div className="inv-empty-state">
             <span><CircleCheck size={24} /></span>
@@ -316,7 +320,7 @@ export default function InventoryManagement({ data, onRegisterBatch, onViewBatch
 
       <div className="inv-info-note">
         <AlertTriangle size={17} />
-        <p><strong>Stock update note:</strong> This screen currently reads inventory and batch data. “Receive stock” opens the existing batch registration form; direct stock adjustment and sales deduction require corresponding backend endpoints.</p>
+        <p><strong>Stock workflow:</strong> Receive new deliveries through Batches. Sales recorded in the Sales section deduct eligible, unexpired stock using FEFO. Use this page to review quantities and locate lots that need attention.</p>
       </div>
     </div>
   );

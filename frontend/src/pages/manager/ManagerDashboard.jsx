@@ -1,294 +1,245 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ArrowDownToLine,
   ArrowRight,
-  Boxes,
+  ArrowUpRight,
+  BrainCircuit,
   CalendarClock,
+  CheckCircle2,
+  ClipboardList,
   Package,
   RefreshCw,
-  ShoppingBag,
-  Store,
-  TrendingUp,
+  ShoppingCart,
   Warehouse,
+  ArrowLeftRight,
+  Store,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-} from "recharts";
+import { getSales } from "../../services/api";
+import "./ManagerDashboard.css";
 
-import NearbyStores from "../../components/NearbyStores";
+const asArray = (value) => Array.isArray(value) ? value : [];
+const fmt = (value) => (Number(value) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const money = (value) => `₹${(Number(value) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-function safeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function getDaysUntilExpiry(expiryDate) {
-  if (!expiryDate) return null;
-  const datePart = String(expiryDate).slice(0, 10);
-  const expiry = new Date(`${datePart}T00:00:00`);
-  if (Number.isNaN(expiry.getTime())) return null;
+function daysUntil(value) {
+  if (!value) return null;
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return Math.round((expiry.getTime() - today.getTime()) / 86400000);
+  return Math.round((date.getTime() - today.getTime()) / 86400000);
 }
 
-function formatDate(value) {
-  if (!value) return "—";
+function dateLabel(value) {
+  if (!value) return "Date not recorded";
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
-export default function ManagerDashboard({
-  data = {},
-  totalStock = 0,
-  chartData = [],
-  onNavigate = () => {},
-  onRefresh = () => {},
-}) {
-  const products = safeArray(data.products);
-  const inventory = safeArray(data.inventory);
-  const batches = safeArray(data.batches);
-  const stores = safeArray(data.stores);
+function Stat({ label, value, hint, icon: Icon, tone = "green", onClick }) {
+  const content = <>
+    <span className={`md-stat-icon ${tone}`}><Icon size={19} /></span>
+    <span className="md-stat-copy"><small>{label}</small><strong>{value}</strong><span>{hint}</span></span>
+    {onClick && <ArrowRight className="md-stat-arrow" size={16} />}
+  </>;
+  return onClick ? <button type="button" className="md-stat-card is-clickable" onClick={onClick}>{content}</button> : <article className="md-stat-card">{content}</article>;
+}
 
-  const expiryBatches = batches
-    .map((batch) => ({ ...batch, daysLeft: getDaysUntilExpiry(batch.expiry_date) }))
-    .filter((batch) => batch.daysLeft !== null)
-    .filter((batch) => Number(batch.quantity_remaining ?? 0) > 0)
-    .sort((a, b) => a.daysLeft - b.daysLeft);
+function SectionTitle({ title, detail, action }) {
+  return <div className="md-section-title"><div><h3>{title}</h3><p>{detail}</p></div>{action}</div>;
+}
 
-  const expiredBatches = expiryBatches.filter((batch) => batch.daysLeft < 0);
-  const nearExpiryBatches = expiryBatches.filter(
-    (batch) => batch.daysLeft >= 0 && batch.daysLeft <= 7
-  );
+function Empty({ icon: Icon = CheckCircle2, title, detail }) {
+  return <div className="md-empty"><Icon size={23} /><strong>{title}</strong><span>{detail}</span></div>;
+}
 
-  const stats = [
-    {
-      label: "Registered products",
-      value: products.length.toLocaleString("en-IN"),
-      caption: "Product catalogue",
-      icon: Package,
-      tone: "green",
-    },
-    {
-      label: "Available stock",
-      value: Number(totalStock || 0).toLocaleString("en-IN"),
-      caption: "Units across inventory records",
-      icon: Warehouse,
-      tone: "blue",
-    },
-    {
-      label: "Inventory batches",
-      value: batches.length.toLocaleString("en-IN"),
-      caption: "Recorded batches",
-      icon: Boxes,
-      tone: "purple",
-    },
-    {
-      label: "Expiry watch",
-      value: (expiredBatches.length + nearExpiryBatches.length).toLocaleString("en-IN"),
-      caption: `${expiredBatches.length} expired · ${nearExpiryBatches.length} due in 7 days`,
-      icon: CalendarClock,
-      tone: "orange",
-    },
-  ];
+const shortcuts = [
+  { id: "inventory", title: "Review inventory", detail: "Stock by product and location", icon: Warehouse, tone: "green" },
+  { id: "products", title: "Product catalogue", detail: "Names, categories and prices", icon: Package, tone: "blue" },
+  { id: "batches", title: "Receive stock", detail: "Register a delivery and expiry", icon: ArrowDownToLine, tone: "purple" },
+  { id: "sales", title: "Record a sale", detail: "Capture sales and deduct FEFO stock", icon: ShoppingCart, tone: "orange" },
+  { id: "expiry", title: "Expiry action list", detail: "Prioritise lots due soon or expired", icon: CalendarClock, tone: "red" },
+  { id: "forecast", title: "Demand forecast", detail: "Review the saved 7-day outlook", icon: BrainCircuit, tone: "blue" },
+  { id: "redistribution", title: "Redistribute stock", detail: "Match surplus with store shortages", icon: ArrowLeftRight, tone: "purple" },
+  { id: "community", title: "Store community", detail: "Share stock and review purchase interest", icon: Store, tone: "green" },
+];
 
-  const actions = [
-    { id: "inventory", label: "Review inventory", detail: "Check available quantities", icon: Warehouse },
-    { id: "products", label: "Manage products", detail: "Catalogue and product details", icon: Package },
-    { id: "batches", label: "Manage batches", detail: "Received stock and expiry dates", icon: Boxes },
-    { id: "stores", label: "View stores", detail: "Registered store locations", icon: Store },
-  ];
+export default function ManagerDashboard({ data = {}, totalStock = 0, onNavigate = () => {}, onRefresh = () => {}, loading = false }) {
+  const products = asArray(data.products);
+  const inventory = asArray(data.inventory);
+  const batches = asArray(data.batches);
+  const stores = asArray(data.stores);
+  const productById = useMemo(() => new Map(products.map((item) => [String(item.product_id), item])), [products]);
+  const storeById = useMemo(() => new Map(stores.map((item) => [String(item.store_id), item])), [stores]);
+  const [recentSales, setRecentSales] = useState([]);
+  const [salesLoading, setSalesLoading] = useState(true);
+  const [salesUnavailable, setSalesUnavailable] = useState(false);
 
-  const chartRows = safeArray(chartData);
-  const recentBatches = [...batches].slice(-5).reverse();
-  const priorityBatches = expiryBatches.slice(0, 4);
+  useEffect(() => {
+    let active = true;
+    setSalesLoading(true);
+    getSales(6)
+      .then((response) => {
+        if (active) {
+          setRecentSales(asArray(response.data));
+          setSalesUnavailable(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setRecentSales([]);
+          setSalesUnavailable(true);
+        }
+      })
+      .finally(() => { if (active) setSalesLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const riskBatches = useMemo(() => batches
+    .map((batch) => ({ ...batch, daysLeft: daysUntil(batch.expiry_date) }))
+    .filter((batch) => Number(batch.quantity_remaining || 0) > 0 && batch.daysLeft !== null && batch.daysLeft <= 7)
+    .sort((a, b) => a.daysLeft - b.daysLeft), [batches]);
+
+  const lowStock = useMemo(() => inventory
+    .filter((row) => Number(row.available_quantity || 0) <= 10)
+    .sort((a, b) => Number(a.available_quantity || 0) - Number(b.available_quantity || 0)), [inventory]);
+
+  const activeBatches = batches.filter((batch) => Number(batch.quantity_remaining || 0) > 0).length;
+  const stockUnits = inventory.length ? totalStock : batches.reduce((sum, batch) => sum + Number(batch.quantity_remaining || 0), 0);
+  const expiredCount = riskBatches.filter((batch) => batch.daysLeft < 0).length;
+  const nearCount = riskBatches.length - expiredCount;
+  const recentBatches = [...batches].sort((a, b) => String(b.created_at || b.batch_id || "").localeCompare(String(a.created_at || a.batch_id || ""))).slice(0, 5);
 
   return (
-    <div className="manager-dashboard">
-      <div className="manager-welcome-card">
-        <div>
-          <span className="dashboard-eyebrow">MANAGER OVERVIEW</span>
-          <h2>Good to see you again.</h2>
-          <p>Here is the latest snapshot of your grocery inventory operations.</p>
+    <div className="manager-home">
+      <section className="md-hero">
+        <div className="md-hero-copy">
+          <span className="md-eyebrow">MANAGER OVERVIEW</span>
+          <h2>Keep stock moving. Reduce waste.</h2>
+          <p>Your daily control centre for inventory, sales, expiry actions and store-to-store coordination.</p>
         </div>
-        <button className="dashboard-refresh-button" type="button" onClick={onRefresh}>
-          <RefreshCw size={16} /> Refresh overview
-        </button>
-      </div>
+        <div className="md-hero-actions">
+          <button type="button" className="md-button md-button-light" onClick={onRefresh}><RefreshCw size={15} /> Refresh data</button>
+          <button type="button" className="md-button md-button-primary" onClick={() => onNavigate("sales")}><ShoppingCart size={15} /> Record sale</button>
+        </div>
+      </section>
 
-      <div className="stats-grid manager-stats-grid">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <article className="stat-card manager-stat-card" key={stat.label}>
-              <div className={`stat-icon ${stat.tone}`}><Icon size={21} /></div>
-              <p>{stat.label}</p>
-              <h2>{stat.value}</h2>
-              <span>{stat.caption}</span>
-            </article>
-          );
-        })}
-      </div>
+      {loading && <div className="md-loading-hint"><span className="md-mini-spinner" /> Loading your latest product, stock and batch records…</div>}
 
-      <div className="dashboard-grid manager-primary-grid">
-        <section className="panel chart-panel manager-chart-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Workspace data overview</h3>
-              <p>Current records retrieved from your backend</p>
-            </div>
-            <TrendingUp size={21} />
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartRows} margin={{ top: 8, right: 10, left: -18, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eaf0eb" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#7d8e83", fontSize: 11 }} />
-                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "#7d8e83", fontSize: 11 }} />
-                <Tooltip cursor={{ fill: "#f3f8f4" }} />
-                <Bar dataKey="count" name="Records" fill="#258653" radius={[7, 7, 0, 0]} maxBarSize={48} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+      <section className="md-stat-grid" aria-label="Store performance summary">
+        <Stat label="Product catalogue" value={loading ? "—" : fmt(products.length)} hint="Registered products" icon={Package} tone="green" onClick={() => onNavigate("products")} />
+        <Stat label="Stock on hand" value={loading ? "—" : fmt(stockUnits)} hint="Units across inventory" icon={Warehouse} tone="blue" onClick={() => onNavigate("inventory")} />
+        <Stat label="Live stock lots" value={loading ? "—" : fmt(activeBatches)} hint="Batches with quantity remaining" icon={ClipboardList} tone="purple" onClick={() => onNavigate("batches")} />
+        <Stat label="Expiry actions" value={loading ? "—" : fmt(riskBatches.length)} hint={`${expiredCount} expired · ${nearCount} due within 7 days`} icon={AlertTriangle} tone={riskBatches.length ? "orange" : "green"} onClick={() => onNavigate("expiry")} />
+      </section>
 
-        <section className="panel quick-panel manager-quick-panel">
-          <div className="panel-heading manager-quick-heading">
-            <div>
-              <h3>Quick actions</h3>
-              <p>Jump to a frequently used workspace</p>
-            </div>
-          </div>
-          <div className="manager-action-list">
-            {actions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button className="manager-action-button" key={action.id} type="button" onClick={() => onNavigate(action.id)}>
-                  <span className="manager-action-icon"><Icon size={18} /></span>
-                  <span className="manager-action-copy"><strong>{action.label}</strong><small>{action.detail}</small></span>
-                  <ArrowRight size={17} className="manager-action-arrow" />
-                </button>
-              );
+      <section className="md-section">
+        <SectionTitle title="Quick actions" detail="Open the task you need without searching through the menu." />
+        <div className="md-shortcut-grid">
+          {shortcuts.map((item) => {
+            const Icon = item.icon;
+            return <button type="button" key={item.id} className="md-shortcut" onClick={() => onNavigate(item.id)}>
+              <span className={`md-shortcut-icon ${item.tone}`}><Icon size={19} /></span>
+              <span className="md-shortcut-copy"><strong>{item.title}</strong><small>{item.detail}</small></span>
+              <ArrowRight size={16} className="md-shortcut-arrow" />
+            </button>;
+          })}
+        </div>
+      </section>
+
+      <div className="md-two-column">
+        <section className="md-panel">
+          <SectionTitle title="Expiry action queue" detail="Lots with stock that is expired or expires within 7 days." action={<button type="button" className="md-link-button" onClick={() => onNavigate("expiry")}>View all <ArrowRight size={14} /></button>} />
+          {loading ? <div className="md-inline-loading">Loading expiry queue…</div> : riskBatches.length ? <div className="md-priority-list">
+            {riskBatches.slice(0, 5).map((batch) => {
+              const product = productById.get(String(batch.product_id));
+              const store = storeById.get(String(batch.store_id));
+              const expired = batch.daysLeft < 0;
+              return <div className="md-priority-row" key={batch.batch_id ?? batch.batch_code}>
+                <span className={`md-priority-icon ${expired ? "danger" : "warning"}`}><AlertTriangle size={16} /></span>
+                <span className="md-priority-copy"><strong>{product?.product_name || `Product ${batch.product_id || "—"}`}</strong><small>{batch.batch_code || `Batch ${batch.batch_id}`} · {store?.store_name || "Store not assigned"} · {fmt(batch.quantity_remaining)} remaining</small></span>
+                <span className={`md-priority-pill ${expired ? "danger" : "warning"}`}>{expired ? `${Math.abs(batch.daysLeft)}d overdue` : batch.daysLeft === 0 ? "Today" : `${batch.daysLeft}d left`}</span>
+              </div>;
             })}
-          </div>
+          </div> : <Empty icon={CheckCircle2} title="No urgent expiry lots" detail="No batch with remaining stock is past expiry or due in the next 7 days." />}
+        </section>
+
+        <section className="md-panel">
+          <SectionTitle title="Low-stock watch" detail="Inventory records at or below the 10-unit attention threshold." action={<button type="button" className="md-link-button" onClick={() => onNavigate("inventory")}>Review inventory <ArrowRight size={14} /></button>} />
+          {loading ? <div className="md-inline-loading">Loading stock levels…</div> : lowStock.length ? <div className="md-low-stock-list">
+            {lowStock.slice(0, 5).map((row, index) => {
+              const product = productById.get(String(row.product_id));
+              const store = storeById.get(String(row.store_id));
+              return <div className="md-low-stock-row" key={`${row.store_id}-${row.product_id}-${index}`}>
+                <span className="md-product-dot"><Package size={15} /></span>
+                <span className="md-low-stock-copy"><strong>{product?.product_name || row.product_name || `Product ${row.product_id || "—"}`}</strong><small>{store?.store_name || row.store_name || "Store not assigned"}</small></span>
+                <strong className="md-low-stock-value">{fmt(row.available_quantity)}</strong>
+              </div>;
+            })}
+          </div> : <Empty icon={CheckCircle2} title="Stock levels look healthy" detail="No inventory record is at or below 10 units." />}
         </section>
       </div>
 
-      <div className="dashboard-bottom-grid manager-lower-grid">
-        <section className="panel dashboard-info-panel expiry-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Expiry watch</h3>
-              <p>Based on batch expiry dates and remaining quantities</p>
-            </div>
-            <button className="text-action" type="button" onClick={() => onNavigate("expiry")}>Open expiry management <ArrowRight size={14} /></button>
-          </div>
-          {priorityBatches.length > 0 ? (
-            <div className="expiry-list">
-              {priorityBatches.map((batch) => {
-                const isExpired = batch.daysLeft < 0;
-                const isToday = batch.daysLeft === 0;
-                const label = isExpired
-                  ? `Expired ${Math.abs(batch.daysLeft)} day${Math.abs(batch.daysLeft) === 1 ? "" : "s"} ago`
-                  : isToday
-                    ? "Expires today"
-                    : `Expires in ${batch.daysLeft} day${batch.daysLeft === 1 ? "" : "s"}`;
-                return (
-                  <div className="expiry-row" key={batch.batch_id ?? batch.batch_code}>
-                    <span className={`expiry-status-icon ${isExpired || isToday ? "urgent" : "soon"}`}><AlertTriangle size={16} /></span>
-                    <span className="expiry-row-main">
-                      <strong>{batch.batch_code || `Batch ${batch.batch_id ?? "—"}`}</strong>
-                      <small>Product {batch.product_id ?? "not assigned"} · {Number(batch.quantity_remaining || 0).toLocaleString("en-IN")} remaining</small>
-                    </span>
-                    <span className={`expiry-pill ${isExpired ? "expired" : "upcoming"}`}>{label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="empty-state-inline">
-              <CalendarClock size={22} />
-              <strong>No urgent expiry records found</strong>
-              <span>There are no batches with remaining stock expiring in the past or within the next 7 days.</span>
-            </div>
-          )}
+      <div className="md-two-column md-bottom-grid">
+        <section className="md-panel">
+          <SectionTitle title="Recent sales" detail="Latest transactions returned by the sales service." action={<button type="button" className="md-link-button" onClick={() => onNavigate("sales")}>Sales history <ArrowRight size={14} /></button>} />
+          {salesLoading ? <div className="md-inline-loading">Loading recent sales…</div> : salesUnavailable ? <Empty icon={ShoppingCart} title="Sales data unavailable" detail="Check the sales service connection, or open Sales to retry." /> : recentSales.length ? <div className="md-sales-list">
+            {recentSales.map((sale) => <div className="md-sale-row" key={sale.sale_id}>
+              <span className="md-sale-icon"><ShoppingCart size={16} /></span>
+              <span className="md-sale-copy"><strong>{sale.product_name || `Product ${sale.product_id}`}</strong><small>{sale.store_name || `Store ${sale.store_id}`} · {dateLabel(sale.sale_date)} · Qty {fmt(sale.quantity_sold)}</small></span>
+              <strong className="md-sale-total">{money(sale.total_amount ?? Number(sale.quantity_sold || 0) * Number(sale.selling_price || 0))}</strong>
+            </div>)}
+          </div> : <Empty icon={ShoppingCart} title="No sales recorded yet" detail="Record the first sale to start building your transaction history." />}
         </section>
 
-        <section className="panel dashboard-info-panel system-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Store operations</h3>
-              <p>Current workspace totals</p>
-            </div>
-            <Store size={21} />
-          </div>
-          <div className="system-overview-item"><span>Registered products</span><strong>{products.length}</strong></div>
-          <div className="system-overview-item"><span>Inventory records</span><strong>{inventory.length}</strong></div>
-          <div className="system-overview-item"><span>Registered stores</span><strong>{stores.length}</strong></div>
-          <div className="system-overview-item"><span>Expired batches with stock</span><strong className={expiredBatches.length ? "value-warning" : ""}>{expiredBatches.length}</strong></div>
-          <div className="system-overview-item"><span>Sales data</span><strong className="value-muted">Not connected</strong></div>
+        <section className="md-panel">
+          <SectionTitle title="Recent stock receipts" detail="Latest batches added to the inventory." action={<button type="button" className="md-link-button" onClick={() => onNavigate("batches")}>Open batches <ArrowRight size={14} /></button>} />
+          {loading ? <div className="md-inline-loading">Loading batches…</div> : recentBatches.length ? <div className="md-receipts-list">
+            {recentBatches.map((batch) => {
+              const product = productById.get(String(batch.product_id));
+              const store = storeById.get(String(batch.store_id));
+              const days = daysUntil(batch.expiry_date);
+              const expiring = days !== null && days <= 7;
+              return <div className="md-receipt-row" key={batch.batch_id ?? batch.batch_code}>
+                <span className="md-receipt-icon"><Package size={16} /></span>
+                <span className="md-receipt-copy"><strong>{product?.product_name || `Product ${batch.product_id || "—"}`}</strong><small>{batch.batch_code || `Batch ${batch.batch_id}`} · {store?.store_name || "Store not assigned"}</small></span>
+                <span className={`md-receipt-qty ${expiring ? "urgent" : ""}`}>{fmt(batch.quantity_remaining)}<small>remaining</small></span>
+              </div>;
+            })}
+          </div> : <Empty icon={Package} title="No stock receipts yet" detail="Register a batch when a new delivery arrives." />}
         </section>
       </div>
 
-      <section className="panel dashboard-info-panel recent-batches-panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Recent inventory batches</h3>
-            <p>Latest batch records returned by the backend</p>
-          </div>
-          <button className="text-action" type="button" onClick={() => onNavigate("batches")}>View all batches <ArrowRight size={14} /></button>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Batch</th><th>Product ID</th><th>Remaining</th><th>Expiry date</th><th>Condition</th></tr>
-            </thead>
-            <tbody>
-              {recentBatches.map((batch) => {
-                const daysLeft = getDaysUntilExpiry(batch.expiry_date);
-                const condition = daysLeft === null ? "Date unavailable" : daysLeft < 0 ? "Expired" : daysLeft <= 7 ? "Near expiry" : "In date";
-                const tone = daysLeft !== null && daysLeft < 0 ? "expired" : daysLeft !== null && daysLeft <= 7 ? "upcoming" : "normal";
-                return (
-                  <tr key={batch.batch_id ?? batch.batch_code}>
-                    <td><strong>{batch.batch_code || batch.batch_id || "—"}</strong></td>
-                    <td>{batch.product_id ?? "—"}</td>
-                    <td>{batch.quantity_remaining ?? "—"}</td>
-                    <td>{formatDate(batch.expiry_date)}</td>
-                    <td><span className={`table-status ${tone}`}>{condition}</span></td>
-                  </tr>
-                );
-              })}
-              {recentBatches.length === 0 && <tr><td colSpan="5" className="empty-cell">No batch records are available yet.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="manager-dashboard-footer-grid">
-        <div className="manager-note-card">
-          <div className="manager-note-icon"><ShoppingBag size={19} /></div>
-          <div><strong>Sales overview</strong><p>Sales reporting will appear here after the sales data endpoint is connected.</p></div>
-          <span className="coming-soon-tag">Not connected</span>
-        </div>
-        <div className="manager-note-card">
-          <div className="manager-note-icon"><TrendingUp size={19} /></div>
-          <div><strong>AI demand forecast</strong><p>Forecast insights will appear here once the forecasting service is integrated.</p></div>
-          <span className="coming-soon-tag">Not connected</span>
-        </div>
-      </section>
-
-      <section className="nearby-stores manager-nearby-panel">
-        <NearbyStores />
-      </section>
+      <footer className="md-footer-note"><CheckCircle2 size={15} /> Stock health is calculated from the records currently loaded. Sales and forecasting insights are shown only when their APIs return data.</footer>
     </div>
   );
+}
+
+export function StaffDashboard({ data = {}, onNavigate = () => {}, loading = false }) {
+  const inventory = asArray(data.inventory);
+  const batches = asArray(data.batches);
+  const products = asArray(data.products);
+  const lowStock = inventory.filter((row) => Number(row.available_quantity || 0) <= 10).length;
+  const expiryAttention = batches.filter((batch) => Number(batch.quantity_remaining || 0) > 0 && (daysUntil(batch.expiry_date) ?? 99) <= 7).length;
+  const steps = [
+    { id: "inventory", title: "Check stock levels", detail: "Review available quantities before receiving or selling goods.", icon: Warehouse },
+    { id: "batches", title: "Receive a delivery", detail: "Create a batch with quantity and expiry dates when stock arrives.", icon: ArrowDownToLine },
+    { id: "sales", title: "Record a sale", detail: "Save the sale so eligible batch quantities are deducted using FEFO.", icon: ShoppingCart },
+    { id: "expiry", title: "Handle expiry alerts", detail: "Prioritise expired and near-expiry items before they become waste.", icon: CalendarClock },
+  ];
+  return <div className="manager-home md-staff-home">
+    <section className="md-hero md-staff-hero"><div className="md-hero-copy"><span className="md-eyebrow">STAFF WORKSPACE</span><h2>Daily store operations</h2><p>A manager-facing overview of the key tasks available to store staff.</p></div><button type="button" className="md-button md-button-primary" onClick={() => onNavigate("inventory")}><Warehouse size={15} /> Open inventory</button></section>
+    <section className="md-stat-grid">
+      <Stat label="Products to handle" value={loading ? "—" : fmt(products.length)} hint="Registered catalogue items" icon={Package} tone="green" onClick={() => onNavigate("products")} />
+      <Stat label="Inventory records" value={loading ? "—" : fmt(inventory.length)} hint="Product and store stock rows" icon={Warehouse} tone="blue" onClick={() => onNavigate("inventory")} />
+      <Stat label="Low-stock records" value={loading ? "—" : fmt(lowStock)} hint="At or below 10 units" icon={AlertTriangle} tone="orange" onClick={() => onNavigate("inventory")} />
+      <Stat label="Expiry actions" value={loading ? "—" : fmt(expiryAttention)} hint="Expired or due within 7 days" icon={CalendarClock} tone="red" onClick={() => onNavigate("expiry")} />
+    </section>
+    <section className="md-panel">
+      <SectionTitle title="Daily workflow" detail="Use these steps to keep receiving, sales and expiry records in sync." />
+      <div className="md-workflow-grid">{steps.map((step, index) => { const Icon = step.icon; return <button type="button" className="md-workflow-step" key={step.id} onClick={() => onNavigate(step.id)}><span className="md-step-number">{index + 1}</span><span className="md-workflow-icon"><Icon size={19} /></span><strong>{step.title}</strong><small>{step.detail}</small><span className="md-step-link">Open task <ArrowUpRight size={14} /></span></button>; })}</div>
+    </section>
+    <section className="md-panel"><SectionTitle title="Operational guidance" detail="What staff actions update in ZeroWasteNet." /><div className="md-guidance-grid"><div><CheckCircle2 size={18} /><strong>Receiving stock</strong><span>Each delivery is saved as a separate batch to preserve expiry traceability.</span></div><div><CheckCircle2 size={18} /><strong>Recording sales</strong><span>The sales endpoint deducts quantity from the earliest-expiring eligible batch.</span></div><div><AlertTriangle size={18} /><strong>Expiry monitoring</strong><span>Expired and near-expiry stock must be reviewed before it is offered or sold.</span></div></div><p className="md-caveat">Individual staff activity logs and task completion tracking are not connected yet. This page summarizes current inventory records and links to the operational screens.</p></section>
+  </div>;
 }

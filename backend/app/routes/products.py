@@ -96,3 +96,61 @@ def get_products():
             status_code=500,
             detail="Unable to retrieve products"
         )
+
+
+@router.put("/{product_id}")
+def update_product(product_id: str, product: ProductCreate):
+    try:
+        with engine.begin() as connection:
+            result = connection.execute(text("""
+                UPDATE public.products
+                SET product_name = :product_name,
+                    category = :category,
+                    unit = :unit,
+                    base_daily_demand = :base_daily_demand,
+                    unit_price = :unit_price
+                WHERE product_id = :product_id
+            """), {**product.model_dump(), "product_id": product_id})
+            if result.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Product was not found")
+        return {"message": "Product updated successfully", "product_id": product_id}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("Product update error:", repr(error))
+        raise HTTPException(status_code=500, detail="Unable to update product")
+
+
+@router.delete("/{product_id}")
+def delete_product(product_id: str):
+    try:
+        with engine.begin() as connection:
+            product = connection.execute(
+                text("SELECT product_id FROM public.products WHERE product_id = :product_id"),
+                {"product_id": product_id},
+            ).first()
+            if not product:
+                raise HTTPException(status_code=404, detail="Product was not found")
+            batch_count = connection.execute(
+                text("SELECT COUNT(*) FROM public.inventory_batches WHERE product_id = :product_id"),
+                {"product_id": product_id},
+            ).scalar_one()
+            sales_count = connection.execute(
+                text("SELECT COUNT(*) FROM public.sales WHERE product_id = :product_id"),
+                {"product_id": product_id},
+            ).scalar_one()
+            if batch_count or sales_count:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This product has batch or sales history and cannot be deleted. Keep it for audit history.",
+                )
+            connection.execute(
+                text("DELETE FROM public.products WHERE product_id = :product_id"),
+                {"product_id": product_id},
+            )
+        return {"message": "Product deleted successfully", "product_id": product_id}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("Product deletion error:", repr(error))
+        raise HTTPException(status_code=500, detail="Unable to delete product")

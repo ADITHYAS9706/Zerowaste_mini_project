@@ -143,7 +143,7 @@ function DeleteConfirmation({ product, onCancel, onConfirm, saving, error }) {
   );
 }
 
-export default function ProductManagement({ products = [], onCreate, onUpdate, onDelete }) {
+export default function ProductManagement({ products = [], dataLoading = false, onCreate, onUpdate, onDelete }) {
   const safeProducts = Array.isArray(products) ? products : [];
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -255,15 +255,15 @@ export default function ProductManagement({ products = [], onCreate, onUpdate, o
       </section>
 
       <section className="pm-stats-grid" aria-label="Product summary">
-        <article className="pm-stat-card"><span className="pm-stat-icon green"><Package size={19} /></span><div><small>Total products</small><strong>{safeProducts.length.toLocaleString("en-IN")}</strong><span>Registered catalogue items</span></div></article>
-        <article className="pm-stat-card"><span className="pm-stat-icon blue"><Boxes size={19} /></span><div><small>Categories</small><strong>{categoryCount.toLocaleString("en-IN")}</strong><span>Distinct product categories</span></div></article>
-        <article className="pm-stat-card"><span className="pm-stat-icon purple"><Barcode size={19} /></span><div><small>Barcodes assigned</small><strong>{barcodeCount.toLocaleString("en-IN")}</strong><span>Products with a barcode value</span></div></article>
+        <article className="pm-stat-card"><span className="pm-stat-icon green"><Package size={19} /></span><div><small>Total products</small><strong>{dataLoading ? "—" : safeProducts.length.toLocaleString("en-IN")}</strong><span>Registered catalogue items</span></div></article>
+        <article className="pm-stat-card"><span className="pm-stat-icon blue"><Boxes size={19} /></span><div><small>Categories</small><strong>{dataLoading ? "—" : categoryCount.toLocaleString("en-IN")}</strong><span>Distinct product categories</span></div></article>
+        <article className="pm-stat-card"><span className="pm-stat-icon purple"><Barcode size={19} /></span><div><small>Barcodes assigned</small><strong>{dataLoading ? "—" : barcodeCount.toLocaleString("en-IN")}</strong><span>Products with a barcode value</span></div></article>
       </section>
 
       <section className="pm-catalogue panel">
         <div className="pm-catalogue-heading">
           <div><h3>Product catalogue</h3><p>Search by product, category, barcode or stock unit.</p></div>
-          <span className="pm-results-count">{filteredProducts.length} of {safeProducts.length} products</span>
+          <span className="pm-results-count">{dataLoading ? "Loading catalogue…" : `${filteredProducts.length} of ${safeProducts.length} products`}</span>
         </div>
         <div className="pm-filters">
           <label className="pm-search search-box"><Search size={17} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products…" aria-label="Search products" /></label>
@@ -297,6 +297,8 @@ export default function ProductManagement({ products = [], onCreate, onUpdate, o
               ))}
             </div>
           </>
+        ) : dataLoading ? (
+          <div className="pm-empty-state pm-loading-state"><span className="pm-loading-spinner" /><strong>Loading product catalogue</strong><p>Product records are being retrieved. You can continue using the Manager menu.</p></div>
         ) : (
           <div className="pm-empty-state"><span><Package size={25} /></span><strong>{safeProducts.length === 0 ? "No products registered yet" : "No matching products"}</strong><p>{safeProducts.length === 0 ? "Register your first product to start building the store catalogue." : "Try another search term or category filter."}</p>{safeProducts.length === 0 ? <button type="button" className="pm-button pm-button-primary" onClick={openCreate}><Plus size={16} /> Register first product</button> : <button type="button" className="pm-button pm-button-light" onClick={() => { setSearch(""); setCategoryFilter("all"); }}>Clear filters</button>}</div>
         )}

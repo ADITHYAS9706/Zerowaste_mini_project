@@ -30,7 +30,6 @@ const managerNavigation = [
   { id: "community", label: "Store Community", icon: Store },
   { id: "staff", label: "Staff Management", icon: Users },
   { id: "settings", label: "Settings", icon: Settings },
-  { id: "stores", label: "Stores", icon: Store },
 ];
 
 export default function ManagerLayout({
