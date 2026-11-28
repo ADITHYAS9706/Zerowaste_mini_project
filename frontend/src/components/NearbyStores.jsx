@@ -1,9 +1,8 @@
-
 import { useState } from "react";
-import { MapPin, Navigation, Store } from "lucide-react";
+import { MapPin, Navigation, Store, Phone, LocateFixed } from "lucide-react";
 import { getNearbyStores } from "../services/api";
 
-function NearbyStores() {
+export default function NearbyStores() {
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -15,136 +14,65 @@ function NearbyStores() {
     setSearched(false);
 
     if (!navigator.geolocation) {
-      setError("Your browser does not support location access.");
+      setError("This browser does not support location access.");
       setLoading(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
+      async ({ coords }) => {
         try {
-          const latitude = position.coords.latitude;
-          const longitude = position.coords.longitude;
-
-          const response = await getNearbyStores(
-            latitude,
-            longitude,
-            10
-          );
-
-          setStores(response.data.stores);
+          const response = await getNearbyStores(coords.latitude, coords.longitude, 10);
+          const rows = response?.data?.stores;
+          setStores(Array.isArray(rows) ? rows : []);
           setSearched(true);
         } catch (err) {
-          setError(
-            err.response?.data?.detail ||
-            "Unable to retrieve nearby stores."
-          );
+          setError(err?.response?.data?.detail || "Unable to retrieve nearby stores. Check the backend connection.");
         } finally {
           setLoading(false);
         }
       },
       (locationError) => {
-        if (locationError.code === 1) {
-          setError("Location permission was denied. Please allow location access.");
-        } else if (locationError.code === 2) {
-          setError("Your current location is unavailable.");
-        } else {
-          setError("Location request timed out. Please try again.");
-        }
-
+        if (locationError.code === 1) setError("Location permission was denied. Allow location access to search nearby stores.");
+        else if (locationError.code === 2) setError("Your current location is unavailable.");
+        else setError("The location request timed out. Please try again.");
         setLoading(false);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 60000,
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>
-        <MapPin size={22} style={{ verticalAlign: "middle" }} />
-        {" "}Nearby Grocery Stores
-      </h2>
-
-      <p>
-        Find grocery stores near your current location.
-      </p>
-
-      <button
-        onClick={findNearbyStores}
-        disabled={loading}
-        style={{
-          padding: "12px 20px",
-          background: "#15803d",
-          color: "white",
-          border: "none",
-          borderRadius: "8px",
-          cursor: loading ? "not-allowed" : "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "8px",
-        }}
-      >
-        <Navigation size={18} />
-        {loading ? "Finding stores..." : "Find Nearby Stores"}
-      </button>
-
-      {error && (
-        <p style={{ color: "red", marginTop: "15px" }}>
-          {error}
-        </p>
-      )}
-
-      {searched && stores.length === 0 && (
-        <p style={{ marginTop: "20px" }}>
-          No grocery stores found within 10 km.
-        </p>
-      )}
-
-      <div style={{ marginTop: "20px" }}>
-        {stores.map((store) => (
-          <div
-            key={store.store_id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              padding: "16px",
-              marginBottom: "12px",
-              maxWidth: "450px",
-            }}
-          >
-            <h3>
-              <Store
-                size={18}
-                style={{ verticalAlign: "middle" }}
-              />
-              {" "}{store.store_name}
-            </h3>
-
-            <p>
-              <MapPin size={15} style={{ verticalAlign: "middle" }} />
-              {" "}{store.address}
-            </p>
-
-            <p>
-              Distance: <strong>{store.distance_km} km</strong>
-            </p>
-
-            <p>
-              Store ID: {store.store_id}
-            </p>
-
-            {store.phone && (
-              <p>Phone: {store.phone}</p>
-            )}
-          </div>
-        ))}
+    <div className="nearby-stores-card">
+      <div className="nearby-stores-heading">
+        <div className="nearby-stores-icon"><MapPin size={19} /></div>
+        <div>
+          <h3>Nearby store suggestions</h3>
+          <p>Find registered grocery stores within 10 km of your location.</p>
+        </div>
+        <button type="button" className="nearby-find-button" onClick={findNearbyStores} disabled={loading}>
+          {loading ? <span className="button-spinner" /> : <Navigation size={16} />}
+          {loading ? "Searching..." : "Find stores"}
+        </button>
       </div>
+
+      {error && <div className="nearby-error" role="alert">{error}</div>}
+      {searched && stores.length === 0 && <div className="nearby-empty">No registered stores were found within 10 km.</div>}
+
+      {stores.length > 0 && (
+        <div className="nearby-store-grid">
+          {stores.map((store) => (
+            <article className="nearby-store-item" key={store.store_id}>
+              <div className="nearby-store-name"><Store size={16} /><strong>{store.store_name || "Grocery store"}</strong></div>
+              <p><MapPin size={14} />{store.address || "Address not provided"}</p>
+              <div className="nearby-store-meta">
+                <span><LocateFixed size={13} /> {store.distance_km ?? "—"} km away</span>
+                {store.phone && <a href={`tel:${store.phone}`}><Phone size={13} /> {store.phone}</a>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
-
-export default NearbyStores;

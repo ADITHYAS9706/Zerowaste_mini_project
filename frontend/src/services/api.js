@@ -22,6 +22,10 @@ export const getBatches = () => api.get("/batches/");
 export const getStores = () => api.get("/stores/");
 
 export const createProduct = (data) => api.post("/products/", data);
+export const updateProduct = (productId, data) =>
+  api.put(`/products/${encodeURIComponent(productId)}`, data);
+export const deleteProduct = (productId) =>
+  api.delete(`/products/${encodeURIComponent(productId)}`);
 export const createBatch = (data) => api.post("/batches/", data);
 export const createStore = (data) => api.post("/stores/", data);
 

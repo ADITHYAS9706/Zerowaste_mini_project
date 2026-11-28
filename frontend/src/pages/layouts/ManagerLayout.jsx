@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   LayoutDashboard,
@@ -36,14 +35,17 @@ const managerNavigation = [
 
 export default function ManagerLayout({
   activePage = "dashboard",
-  onNavigate,
-  onRefresh,
+  onNavigate = () => {},
+  onRefresh = () => {},
   children,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const activeLabel =
+    managerNavigation.find((item) => item.id === activePage)?.label ||
+    (activePage === "staff-dashboard" ? "Staff Dashboard" : "Dashboard");
 
   function handleNavigate(page) {
-    onNavigate?.(page);
+    onNavigate(page);
     setMobileMenuOpen(false);
   }
 
@@ -52,22 +54,24 @@ export default function ManagerLayout({
       {mobileMenuOpen && (
         <button
           className="mobile-sidebar-backdrop"
-          aria-label="Close navigation"
+          aria-label="Close navigation menu"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
-      <aside className={`sidebar manager-sidebar ${mobileMenuOpen ? "mobile-open" : ""}`}>
+      <aside
+        className={`sidebar manager-sidebar ${mobileMenuOpen ? "mobile-open" : ""}`}
+        aria-label="Manager navigation"
+      >
         <div className="brand">
-          <div className="brand-icon">
-            <Boxes size={23} />
-          </div>
-          <div>
+          <div className="brand-icon"><Boxes size={23} /></div>
+          <div className="brand-copy">
             <h2>ZeroWasteNet</h2>
             <span>Manager workspace</span>
           </div>
           <button
             className="mobile-close-button"
+            type="button"
             aria-label="Close menu"
             onClick={() => setMobileMenuOpen(false)}
           >
@@ -76,18 +80,19 @@ export default function ManagerLayout({
         </div>
 
         <div className="nav-heading">MANAGEMENT</div>
-
         <nav className="navigation">
           {managerNavigation.map((item) => {
             const Icon = item.icon;
-
+            const isActive = activePage === item.id;
             return (
               <button
                 key={item.id}
-                className={`nav-item ${activePage === item.id ? "active" : ""}`}
+                type="button"
+                className={`nav-item ${isActive ? "active" : ""}`}
                 onClick={() => handleNavigate(item.id)}
+                aria-current={isActive ? "page" : undefined}
               >
-                <Icon size={19} />
+                <Icon size={19} aria-hidden="true" />
                 <span>{item.label}</span>
               </button>
             );
@@ -95,18 +100,21 @@ export default function ManagerLayout({
         </nav>
 
         <div className="manager-staff-link">
+          <div className="nav-heading">QUICK ACCESS</div>
           <button
-            className="nav-item"
+            type="button"
+            className={`nav-item ${activePage === "staff-dashboard" ? "active" : ""}`}
             onClick={() => handleNavigate("staff-dashboard")}
+            aria-current={activePage === "staff-dashboard" ? "page" : undefined}
           >
-            <UserRound size={19} />
+            <UserRound size={19} aria-hidden="true" />
             <span>Staff Dashboard</span>
           </button>
         </div>
 
         <div className="sidebar-footer">
           <div className="status-dot" />
-          Manager access
+          <span className="footer-label">Manager access</span>
           <span>v1.0</span>
         </div>
       </aside>
@@ -116,33 +124,28 @@ export default function ManagerLayout({
           <div className="topbar-title">
             <button
               className="mobile-menu-button"
+              type="button"
               aria-label="Open navigation"
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu size={21} />
             </button>
-
             <div>
-              <div className="breadcrumb">
-                Manager Workspace / {managerNavigation.find((item) => item.id === activePage)?.label || "Dashboard"}
-              </div>
-              <h1>
-                {managerNavigation.find((item) => item.id === activePage)?.label ||
-                  (activePage === "staff-dashboard" ? "Staff Dashboard" : "Dashboard")}
-              </h1>
+              <div className="breadcrumb">Manager Workspace / {activeLabel}</div>
+              <h1>{activeLabel}</h1>
             </div>
           </div>
 
           <div className="top-actions">
             <button
               className="icon-button"
+              type="button"
               onClick={onRefresh}
               title="Refresh data"
               aria-label="Refresh data"
             >
               <RefreshCw size={18} />
             </button>
-
             <div className="profile">
               <div className="avatar">MG</div>
               <div>
@@ -153,9 +156,7 @@ export default function ManagerLayout({
           </div>
         </header>
 
-        <section className="content manager-content">
-          {children}
-        </section>
+        <section className="content manager-content">{children}</section>
       </main>
     </div>
   );
