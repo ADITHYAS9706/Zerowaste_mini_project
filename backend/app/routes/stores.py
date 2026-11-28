@@ -10,12 +10,29 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from supabase import create_client
 
-from app.database import engine
 
-
+# -----------------------------------------
 # Load backend environment variables
+# -----------------------------------------
+
 BASE_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(BASE_DIR / ".env")
+ENV_FILE = BASE_DIR / ".env"
+
+load_dotenv(ENV_FILE, override=True)
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+print("========== SUPABASE CONFIGURATION ==========")
+print("Environment file:", ENV_FILE)
+print("Environment file exists:", ENV_FILE.exists())
+print("Supabase URL loaded:", bool(SUPABASE_URL))
+print("Service role key loaded:", bool(SUPABASE_SERVICE_ROLE_KEY))
+print("============================================")
+
+
+# Import database engine after loading environment variables
+from app.database import engine
 
 
 router = APIRouter(prefix="/stores", tags=["Stores"])
@@ -43,6 +60,7 @@ class StoreRegistration(BaseModel):
     def validate_email(cls, value):
         if "@" not in value or "." not in value.split("@")[-1]:
             raise ValueError("Enter a valid email address")
+
         return value.lower()
 
 
@@ -51,6 +69,7 @@ class StoreRegistration(BaseModel):
 # -----------------------------------------
 
 def calculate_distance(lat1, lon1, lat2, lon2):
+
     earth_radius = 6371
 
     lat1 = math.radians(lat1)
@@ -74,26 +93,27 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 
 # -----------------------------------------
-# Free store and manager registration
+# Register store and manager
 # -----------------------------------------
 
 @router.post("/register", status_code=201)
 def register_store(registration: StoreRegistration):
 
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_secret = os.getenv("SUPABASE_SECRET_KEY")
-
-    if not supabase_url or not supabase_secret:
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         raise HTTPException(
             status_code=500,
             detail="Supabase backend configuration is missing"
         )
 
-    supabase = create_client(supabase_url, supabase_secret)
+    supabase = create_client(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY
+    )
 
     auth_user_id = None
 
     try:
+
         # 1. Create manager authentication account
         auth_response = supabase.auth.admin.create_user({
             "email": registration.email,
@@ -112,13 +132,14 @@ def register_store(registration: StoreRegistration):
         # 2. Create store and manager profile
         with engine.begin() as connection:
 
+            # Generate store ID
             next_id = connection.execute(
                 text("SELECT nextval('public.store_id_seq')")
             ).scalar_one()
 
             store_id = f"S{next_id:03d}"
 
-            # Create store
+            # Insert store record
             connection.execute(
                 text("""
                     INSERT INTO public.stores (
@@ -154,7 +175,7 @@ def register_store(registration: StoreRegistration):
                 }
             )
 
-            # Create manager profile
+            # Insert manager profile
             connection.execute(
                 text("""
                     INSERT INTO public.profiles (
@@ -187,24 +208,25 @@ def register_store(registration: StoreRegistration):
             "role": "manager"
         }
 
-    except HTTPException:
-        raise
-
     except Exception as error:
 
-        print("Store registration error:", repr(error))
+        print("========== STORE REGISTRATION ERROR ==========")
+        print(repr(error))
+        print("===============================================")
 
         # If database creation fails, remove the Auth account
         # so an unlinked account is not left behind.
         if auth_user_id:
+
             try:
                 supabase.auth.admin.delete_user(auth_user_id)
+
             except Exception as cleanup_error:
-                print("Auth cleanup error:", repr(cleanup_error))
+                print("AUTH CLEANUP ERROR:", repr(cleanup_error))
 
         raise HTTPException(
             status_code=400,
-            detail="Registration failed. Check your details or try another email."
+            detail="Registration failed. Check the backend terminal for the actual error."
         )
 
 
@@ -216,7 +238,9 @@ def register_store(registration: StoreRegistration):
 def get_stores():
 
     try:
+
         with engine.connect() as connection:
+
             result = connection.execute(
                 text("""
                     SELECT
@@ -239,6 +263,7 @@ def get_stores():
         return stores
 
     except Exception as error:
+
         print("Get stores error:", repr(error))
 
         raise HTTPException(
@@ -259,6 +284,7 @@ def get_nearby_stores(
 ):
 
     try:
+
         query = text("""
             SELECT
                 store_id,
@@ -287,6 +313,7 @@ def get_nearby_stores(
             )
 
             if distance <= radius_km:
+
                 nearby_stores.append({
                     "store_id": store["store_id"],
                     "store_name": store["store_name"],
@@ -308,6 +335,7 @@ def get_nearby_stores(
         }
 
     except Exception as error:
+
         print("Nearby stores error:", repr(error))
 
         raise HTTPException(

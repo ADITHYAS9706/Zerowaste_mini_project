@@ -9,42 +9,25 @@ import {
 } from "react-router-dom";
 
 import "./index.css";
-
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-
-function DashboardSetup() {
-  return (
-    <div style={{
-      minHeight: "100vh",
-      display: "grid",
-      placeItems: "center",
-      padding: "24px",
-      fontFamily: "Arial, sans-serif",
-      textAlign: "center",
-    }}>
-      <div>
-        <h2>Authentication successful</h2>
-        <p>Your dashboard integration is the next step.</p>
-        <a href="/login">Return to login</a>
-      </div>
-    </div>
-  );
-}
+import App from "./App";
 
 function RootApp() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        {/* Open the manager dashboard directly */}
+        <Route path="/" element={<App />} />
 
-        {/* Temporary destinations until protected dashboards are connected */}
-        <Route path="/manager" element={<DashboardSetup />} />
-        <Route path="/staff" element={<DashboardSetup />} />
+        {/* Temporarily bypass authentication */}
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/register" element={<Navigate to="/" replace />} />
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* Dashboard shortcuts */}
+        <Route path="/manager" element={<Navigate to="/" replace />} />
+        <Route path="/staff" element={<Navigate to="/" replace />} />
+
+        {/* Redirect unknown URLs */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
